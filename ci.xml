@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project name="FortesRH" basedir="." default="integrate-server">
+
+	<taskdef resource="net/sf/antcontrib/antlib.xml"/>
+	<property file="ci.properties" />
+	<property environment="env"/>
+
+   	<path id="project.classpath">
+		<pathelement location="${build.dir}" />
+		<fileset dir="${lib.dir}">
+			<include name="*.jar" />
+			<include name="ant-apache-log4j.jar" />
+			<exclude name="ant-junit.jar" />
+            <exclude name="webwork2-spring.jar" />
+		</fileset>
+		<fileset dir="${project.dir}/extras">
+			<include name="servlet-api.jar" />
+		</fileset>
+   	</path>
+
+   	<path id="project.classpath2">
+		<fileset dir="${lib.dir}">
+			<include name="*.jar" />
+			<include name="ant-apache-log4j.jar" />
+			<exclude name="ant-junit.jar" />
+            <exclude name="webwork2-spring.jar" />
+		</fileset>
+		<fileset dir="${project.dir}/extras">
+			<include name="servlet-api.jar" />
+		</fileset>
+   	</path>
+
+   	<path id="project.classpath.cobertura">
+		<fileset dir="./extras">
+			<include name="*.jar" />
+		</fileset>
+   	</path>
+
+	<path id="project.classpath.ireport">
+		<pathelement location="${build.dir}" />
+		<fileset dir="${jasperreports.dir}">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+
+	<target name="resources">
+		<copy todir="${build.dir}" includeEmptyDirs="no">
+			<fileset dir="${src.dir}">
+				<patternset>
+					<exclude name="**/*.java"/>
+				</patternset>
+			</fileset>
+		</copy>
+
+		<copy todir="${build.dir}" includeEmptyDirs="no">
+			<fileset dir="${srcTeste.dir}">
+				<patternset>
+					<exclude name="**/*.java"/>
+				</patternset>
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="recreate-bd">
+		<exec failonerror="true" executable="ruby">
+			<arg value="${project.dir}/features/support/reload_db.rb" />
+			<arg value=" --start" />
+		</exec>
+	</target>
+	
+	<target name="recreate-and-update-bd" depends="recreate-bd">
+		<exec failonerror="true" executable="ruby">
+			<arg value="${project.dir}/migrate.rb" />
+		</exec>
+	</target>
+
+	<target name="build" depends="recreate-and-update-bd">
+		<mkdir dir="${build.dir}" />
+		<delete includeemptydirs="true">
+			<fileset dir="${build.dir}" includes="**/*/**" />
+		</delete>
+
+		<javac debug="true" debuglevel="vars,lines,source" nowarn="true" encoding="UTF-8" srcdir="${src.dir}" destdir="${build.dir}" failonerror="true">
+			<classpath refid="project.classpath" />
+		</javac>
+		<javac debug="true" debuglevel="vars,lines,source" nowarn="true" encoding="UTF-8" srcdir="${srcTeste.dir}" destdir="${build.dir}" failonerror="true">
+			<classpath refid="project.classpath" />
+			<classpath refid="project.classpath.cobertura" />
+		</javac>
+
+		<antcall target="resources"></antcall>
+	</target>
+
+	<path id="cobertura.classpath">
+		<fileset dir="${cobertura.dir}">
+			<include name="cobertura.jar" />
+			<include name="lib/**/*.jar" />
+		</fileset>
+	</path>
+
+	<taskdef classpathref="cobertura.classpath" resource="tasks.properties"/>
+
+	<target name="instrument" depends="build">
+
+        <delete dir="${instrumented.dir}" />
+        <delete dir="${coverage.xml.dir}" />
+
+		<mkdir dir="${instrumented.dir}" />
+		<mkdir dir="${coverage.xml.dir}" />
+		<cobertura-instrument datafile="${coverage.xml.dir}/cobertura.ser" todir="${instrumented.dir}">
+			<ignore regex="org.apache.log4j.*" />
+			<fileset dir="${build.dir}">
+				<include name="**/*.class" />
+				<exclude name="**/test/**/*.class" />
+			</fileset>
+		</cobertura-instrument>
+	</target>
+
+	<target name="test-coverage" depends="instrument">
+
+		<property name="allTests.class" value="com.fortes.rh.test.AllUnitTests" />
+
+		<delete dir="${junit.xml.dir}" />
+		<mkdir dir="${junit.xml.dir}" />
+		
+		<dirname file="ci.xml" property="current.dir" />
+		<junit haltonfailure="true" haltonerror="true"
+			fork="yes" dir="${current.dir}" maxmemory="512m">
+
+			<sysproperty key="net.sourceforge.cobertura.datafile" file="${coverage.xml.dir}/cobertura.ser" />
+			<sysproperty key="basedir" value="." />
+            <formatter type="xml" usefile="true" />
+
+			<jvmarg value="-javaagent:${jmockit.dir}" />
+            <jvmarg value="-Xms40m" />
+            <jvmarg value="-Xmx512m" />
+            <jvmarg value="-XX:MaxPermSize=512M" />
+
+            <classpath refid="project.classpath2"/>
+            <classpath location="${instrumented.dir}"/>
+            <classpath location="${build.dir}"/>
+
+            <classpath refid="cobertura.classpath"/>
+
+            <batchtest todir="${junit.xml.dir}" >
+                <fileset dir="${srcTeste.dir}">
+                    <include name="**/test/**/AllUnitTests.java" />
+                </fileset>
+            </batchtest>
+		</junit>
+		
+		<delete dir="${junit.xml.dir}" />
+		<mkdir dir="${junit.xml.dir}" />
+
+		<junitreport todir="${junit.xml.dir}">
+			<fileset dir="${junit.xml.dir}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${junit.xml.dir}/html"/>
+		</junitreport>
+	</target>
+
+	<target name="coverage" depends="test-coverage">
+		<cobertura-report datafile="${coverage.xml.dir}/cobertura.ser" srcdir="${src.dir}" destdir="${coverage.xml.dir}" format="xml" />
+	</target>
+
+	<target name="test" depends="build">
+		<property name="allTests.class" value="com.fortes.rh.test.AllUnitTests" />
+
+		<dirname file="ci.xml" property="current.dir" />
+		
+		<junit showoutput="true" printsummary="on" enabletestlistenerevents="true" haltonfailure="true" haltonerror="true" fork="true" dir="${current.dir}" maxmemory="1024m" forkmode="once">
+			<jvmarg value="-javaagent:${jmockit.dir}" />
+            <jvmarg value="-Xms40m" />
+            <jvmarg value="-Xmx512m" />
+            <jvmarg value="-XX:MaxPermSize=512M" />
+			<classpath>
+				<path refid="project.classpath" />
+				<pathelement path="${build.dir}" />
+			</classpath>
+			 <batchtest todir="${junit.xml.dir}" >
+                <fileset dir="${srcTeste.dir}">
+                    <include name="**/test/**/AllUnitTests.java" />
+                </fileset>
+            </batchtest>
+			
+			<formatter type="xml"/>
+		</junit>
+	</target>
+	
+	<target name="executeSonar">
+		<echo message="Executando SONAR para FortesRH..."/>
+		<exec executable="sonar-runner" outputproperty="sonar">
+		</exec>
+		
+		<move file="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties" tofile="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties.bkp"/>
+		<move file="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties.test" tofile="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties"/>
+		
+		<echo message="Executando SONAR para FortesRHTest..."/>
+		<exec executable="sonar-runner" outputproperty="sonar">
+		</exec>
+		
+		<move file="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties" tofile="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties.test"/>
+		<move file="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties.bkp" tofile="/home/fortes/sonar/sonar-runner-2.2/conf/sonar-runner.properties"/>
+	</target>
+
+	<target name="integrate-server" depends="coverage">
+		<echo message="Integração concluída com sucesso." />
+	</target>
+	
+	<path id="project.classpath.ireport">
+		<pathelement location="${project.dir}/web/WEB-INF/classes" />
+		<fileset dir="${env.JASPER_LIB}">  
+			<include name="*.jar" />
+			<exclude name="jasperreports-chart-themes-5.0.0.jar"/> 
+		</fileset>
+	</path>
+	
+	<target name="jasper" >
+		<taskdef name="jaspercompile" classname="net.sf.jasperreports.ant.JRAntCompileTask">
+			<classpath refid="project.classpath.ireport"/>
+		</taskdef>
+		
+		<jaspercompile destdir="web/WEB-INF/report">
+			<src>
+				<fileset dir="web/WEB-INF/report">
+					<include name="*.jrxml" />
+				</fileset>
+			</src>
+		</jaspercompile>
+	</target>
+			
+	<target name="war" depends="jasper, build">
+		<mkdir dir="dist" />
+		<property name="tmpweb" value="dist/tmpweb" />
+		<property name="base" value="web" />
+		<property name="lib" value="WEB-INF/lib" />
+		<property name="test-ignore" value="WEB-INF/classes/com/fortes/rh/test" />
+	
+		<!-- Copia todos os arquivos, com execao das libs, para diretorio temporario -->
+		<copy todir="${tmpweb}">
+			<fileset dir="${base}">
+				<exclude name="WEB-INF/lib/**" />
+				<exclude name="WEB-INF/report/*.java" />
+				<exclude name="WEB-INF/report/*.bak" />
+				<exclude name="WEB-INF/anexosLtcat/*.*" />
+				<exclude name="WEB-INF/atualizador/*.*" />
+				<exclude name="WEB-INF/temp/*.*" />
+				<exclude name="anexos/*.*" />
+				<exclude name="${metadados.dir}/clean.sql"/>
+				<exclude name="${metadados.dir}/create_data.sql"/>
+				<exclude name="${metadados.dir}/create.sql"/>
+				<exclude name="${metadados.dir}/populate.sql"/>
+				<exclude name="${metadados.dir}/update_dev.sql"/>
+			</fileset>
+		</copy>
+		<!-- Copia as libs para diretorio temporario -->
+		<copy todir="${tmpweb}/${lib}" flatten="true" >
+			<fileset dir="${base}/${lib}">
+				<exclude name="fortes-ant.jar" />
+				<exclude name="pmd-4.2.2.jar" />
+				<exclude name="hsqldb.jar" />
+				<exclude name="checkstyle-4.4.jar" />
+				<exclude name="findbugs/**" />
+				<exclude name="findbugs*.jar" />
+				<exclude name="emma*.jar" />
+				<exclude name="ant-junit.jar" />
+				<exclude name="jmock*.jar" />
+				<exclude name="classmock_1.0.jar" />
+				<exclude name="junit.jar" />
+				<exclude name="selenium*.jar" />
+				<exclude name="spring-mock.jar" />
+				<exclude name="retroweaver-all-2.0.2.jar" />
+				<exclude name="args4j-2.0.1.jar" />
+				<exclude name="org.crap4j.jar" />
+				<exclude name="servlet-2.3.jar" />
+				<exclude name="backup"/>
+			</fileset>
+		</copy>
+		
+		<!-- Gera hibernate.cfg.xml com hibernate.show_sql = false -->
+		<exec executable="ruby" failonerror="true">
+			<arg value="geracaoHibernateCfg.rb" />
+			<arg value="${tmpweb}/WEB-INF/classes" />
+		</exec>
+		
+		<!-- Gera War file de acordo com o diretorio temporario -->
+		<war webxml="${tmpweb}/WEB-INF/web.xml"
+			destfile="dist/fortesrh.war" basedir="${tmpweb}"
+			excludes="${test-ignore}/**">
+		</war>
+		
+		<delete dir="${tmpweb}" /> <!--Deleta diretorio temporario -->
+		
+		<antcall target="rumMigrate"/>
+	</target>
+	
+	<target name="getUltimoCommit">
+		<taskdef resource="net/sf/antcontrib/antlib.xml">
+	        <classpath>
+	            <pathelement location="web/WEB-INF/lib/ant-contrib-1.0b3.jar"/>
+	        </classpath>
+        </taskdef>
+		
+		<exec executable="git" outputproperty="commitCompleto">
+		    <arg value="log"/>
+		    <arg value="-1"/>
+		    <arg value="--pretty=oneline"/>
+		</exec>
+		<propertyregex property="commit" input="${commitCompleto}" regexp="(\[[SsPp][0-9]{11}\])(\040)?(\[.*\])?(.*)" select="\1\4"/>
+		
+		<echo message="${commit}"/>
+	</target>
+	
+	<target name="enviarEmail" depends="getUltimoCommit" if="commit" >
+		<propertyregex property="numeroCartao" input="${commit}" regexp="(\[)([SsPp][0-9]{11})(\])" select="\2"/>
+		<propertyregex property="body" input="${commit}" regexp="(\[[SsPp][0-9]{11}\])(.*)" select="\2"/>
+
+		<condition property="umaSolicitacao">
+		  <matches pattern="^[Ss]" string="${numeroCartao}"/>
+		</condition>
+		<if>
+		    <equals arg1="${umaSolicitacao}" arg2="true"/>
+		    <then>
+		    	<property name="solicitacaoOuPendencia" value="Solicitação" />
+		    </then>
+		    <else>
+		    	<property name="solicitacaoOuPendencia" value="Pendência" />
+		    </else>
+		</if>
+		
+		<mail
+		  tolist="${emailDestino}"
+		  from="${emailFrom}"
+		  subject="${solicitacaoOuPendencia} liberada para homologação (${numeroCartao})"
+		  mailhost="smtp.tifortes.com.br"
+		  mailport="25"
+		  ssl="false">
+		  <message>
+			${body}
+			
+			RH Homologação:
+			http://10.1.3.48:8080/fortesrhhomologacao
+		  </message>
+		</mail>
+	</target>
+	
+	<target name="calculaMetricas" depends="executeSonar">
+		<exec executable="/bin/bash" outputproperty="metricasQueAumentaram">
+		    <arg value="metricas.sh"/>
+		    <arg value="/tmp"/>
+		</exec>
+		
+		<condition property="metricasAumentaram">
+			<and>
+				<length string="${metricasQueAumentaram}" trim="true" when="greater" length="0"/>
+			</and>
+		</condition>
+		
+		<echo message="${metricasQueAumentaram}"/>
+	</target>
+	
+	<target name="enviarEmailMetricas" depends="calculaMetricas" if="metricasAumentaram" >
+		<mail
+		  tolist="${emailDestinoDev}"
+		  from="${emailFrom}"
+		  subject="Algumas métricas aumentaram após o último commit."
+		  mailhost="smtp.tifortes.com.br"
+		  mailport="25"
+		  ssl="false">
+		  <message>
+${metricasQueAumentaram}
+			 	
+RH Homologação:
+http://10.1.3.48:8080/fortesrhhomologacao
+		  </message>
+		</mail>
+	</target>
+	
+	<target name="rumMigrate">
+		<echo message="Rodando Migrations banco homologacao"/>
+		<exec executable="ruby">
+		    <arg value="migrate.rb"/>
+		    <arg value="--db"/>
+		    <arg value="homologacao"/>
+		</exec>
+		<echo message="Migrate executada."/>
+	</target>
+	
+	 <target name="stopTomcat">
+        <exec executable="sh">
+        	<arg value="-c"/>
+        	<arg value="/home/fortes/tomcat7/bin/shutdown.sh"/>
+        </exec>
+        <echo message="Stop Tomcat 7"/>
+    </target>
+	
+    <target name="startTomcat">
+    	<exec executable="sh">
+    		<arg value="-c"/>
+            <arg value="/home/fortes/tomcat7/bin/startup.sh"/>
+        </exec>
+        <echo message="Start Tomcat 7"/>
+    </target>
+	
+	<target name="checkStopTomcat">
+		<waitfor maxwait="4" maxwaitunit="minute" timeoutproperty="tomcat.stop.expired.time">
+			<not>
+		        <and>
+		        	<http url="http://127.0.0.1:8080/fortesrhhomologacao/" errorsBeginAt="404"/>
+					<socket server="127.0.0.1" port="8080" />
+		        </and>
+			</not>
+	    </waitfor>
+		<!-- falha -->
+		<fail if="tomcat.stop.expired.time"	message="Nao foi possivel parar o servidor Tomcat ou a Aplicacao." />
+		<!-- sucesso -->
+		<echo level="verbose" message="Tomcat derrubado com sucesso." />
+	</target>
+	
+	<target name="checkStartTomcat">
+		<!-- Verifica se o Tomcat está no ar -->
+		<waitfor maxwait="5" maxwaitunit="minute"
+			timeoutproperty="tomcat.start.expired.time">
+	        <and>
+	             <socket server="127.0.0.1" port="8080"/>
+	             <http url="http://127.0.0.1:8080/fortesrhhomologacao/" errorsBeginAt="404"/>
+	        </and>
+	    </waitfor>
+		<!-- falha -->
+		<fail if="tomcat.start.expired.time"
+			message="Nao foi possivel iniciar o servidor Tomcat ou a Aplicacao." />
+		<!-- sucesso -->
+		<echo message="Tomcat iniciado com sucesso." />
+	</target>
+	
+	<target name="removerPastaFortesRhHomologacao">
+		<echo message="Removendo pasta fortesrhhomologacao"/>
+		<exec executable="rm">
+        	<arg value="-rf"/>
+        	<arg value="/home/fortes/tomcat7/webapps/fortesrhhomologacao/"/>
+    	</exec>
+	</target>
+	
+	<target name="removerWarFortesRhHomologacao">
+		<echo message="Removendo WAR fortesrhhomologacao"/>
+		<exec executable="rm">
+            <arg value="/home/fortes/tomcat7/webapps/fortesrhhomologacao.war"/>
+        </exec>
+	</target>
+	
+	<target name="removerPastaWork">
+		<echo message="Limpando pasta work do Tomcat 7"/>
+		<exec executable="rm">
+            <arg value="-rf"/>
+            <arg value="/home/fortes/tomcat7/work/*"/>
+        </exec>
+	</target>
+	
+	<target name="copyWar">
+        <echo message="atualizando WAR"/>
+		<exec executable="cp">
+            <arg value="dist/fortesrh.war"/>
+            <arg value="/home/fortes/tomcat7/webapps/fortesrhhomologacao.war"/>
+        </exec>
+	</target>
+	
+	<target name="deploy">
+		<echo message="Início Deploy"/>
+		<antcall target="stopTomcat"/>
+		<antcall target="war"/>
+		<antcall target="checkStopTomcat"/>
+		<antcall target="rumMigrate"/>
+		<antcall target="removerWarFortesRhHomologacao"/>
+		<antcall target="removerPastaFortesRhHomologacao"/>
+		<antcall target="removerPastaWork"/>
+		<antcall target="copyWar"/>
+		<antcall target="startTomcat"/>
+		<antcall target="checkStartTomcat"/>
+		<echo message="Fim Deploy"/>
+	</target>
+</project>

@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project name="FortesRH" basedir=".." default="init">
+	
+	<property file="${ant.project.name}/build.properties" />
+
+	<property environment="env"/>
+	<property name="class_dir" value="${ant.project.name}/web/WEB-INF/classes" />
+	<property name="report_dir" value="${ant.project.name}/web/WEB-INF/report" />
+	
+	<path id="project.classpath">
+		<pathelement location="${class_dir}" />
+		<fileset dir="${ant.project.name}/web/WEB-INF/lib">
+			<include name="*.jar" />
+		</fileset>
+		<fileset dir="${ant.project.name}/extras">
+			<include name="*.jar" />
+		</fileset>
+   	</path>
+
+	<path id="project.classpath.ireport">
+		<pathelement location="${class_dir}" />
+		<fileset dir="${env.JASPER_LIB}">  
+			<include name="*.jar" />
+			<exclude name="jasperreports-chart-themes-6.3.1.jar"/> 
+		</fileset>
+	</path>
+
+	<target name="init" depends="war">
+		<mkdir dir="${ant.project.name}/dist" />
+		
+		<!-- Copia arquivo de versoes para o diretorio de distribuicao -->
+		<copy file="${ant.project.name}/web/WEB-INF/fortesrh.ver" todir="${ant.project.name}/dist" />
+		
+		<!-- Gera atualizador -->
+		<antcall target="build_atualizador"></antcall>
+	</target>
+
+	<target name="jasper" depends="clean-reports">
+		<taskdef name="jaspercompile" classname="net.sf.jasperreports.ant.JRAntCompileTask">
+			<classpath refid="project.classpath.ireport"/>
+		</taskdef>
+		
+		<jaspercompile destdir="${report_dir}" srcdir="${report_dir}">
+			<include name="*.jrxml" />
+        	<date datetime="${trintaCincoDiasAtras} 01:00 AM" when="after"/>
+		</jaspercompile>
+	</target>
+	
+	<target name="clean-reports">
+		<taskdef resource="net/sf/antcontrib/antlib.xml">  
+	        <classpath>  
+	            <pathelement location="${ant.project.name}/web/WEB-INF/lib/ant-contrib-1.0b3.jar"/>  
+	        </classpath>  
+		</taskdef> 
+		
+		<tstamp>
+	        <format property="trintaCincoDiasAtras" pattern="MM/dd/yyyy" offset="-35" unit="day"/>
+	    </tstamp>
+
+		<for param="jrxml.file">  
+            <fileset dir="${report_dir}">
+                <include name="*.jrxml" />
+                <date datetime="${trintaCincoDiasAtras} 01:00 AM" when="after"/>
+            </fileset>	       
+			<sequential>  
+			    <propertyregex override="yes" property="jasper.file"  input="@{jrxml.file}" regexp=".jrxml" replace=".jasper"/>
+				<delete file="${jasper.file}"/>
+	        </sequential>  
+	    </for> 
+	</target>
+	
+	<target name="compiler">
+		<mkdir dir="${class_dir}" />
+		<delete includeemptydirs="true">
+			<fileset dir="${class_dir}" includes="**/*/**" />
+		</delete>
+
+		<javac debug="on" encoding="UTF-8" srcdir="${src.dir}" destdir="${class_dir}" failonerror="true"
+			source="1.7" target="1.7">
+			<classpath refid="project.classpath" />
+		</javac>
+		<javac debug="on" encoding="UTF-8" srcdir="${srcTeste.dir}" destdir="${class_dir}" failonerror="true"
+			source="1.7" target="1.7">
+			<classpath refid="project.classpath" />
+		</javac>
+
+		<antcall target="resources"></antcall>
+	</target>
+	
+	<target name="resources">
+		<copy todir="${class_dir}" includeEmptyDirs="no">
+			<fileset dir="${src.dir}">
+				<patternset>
+					<exclude name="**/*.java"/>
+				</patternset>
+			</fileset>
+			<fileset dir="${srcTeste.dir}">
+				<patternset>
+					<exclude name="**/*.java"/>
+				</patternset>
+			</fileset>
+		</copy>
+	</target>
+	
+	<target name="war" depends="jasper, compiler">
+		
+		<mkdir dir="${ant.project.name}/dist" />
+		<property name="tmpweb" value="${ant.project.name}/dist/tmpweb" />
+		<property name="base" value="${ant.project.name}/web" />
+		<property name="lib" value="WEB-INF/lib" />
+		<property name="test-ignore" value="WEB-INF/classes/com/fortes/rh/test" />
+
+		<!-- Copia todos os arquivos, com execao das libs, para diretorio temporario -->
+		<copy todir="${tmpweb}">
+			<fileset dir="${base}">
+				<exclude name="WEB-INF/lib/**" />
+				<exclude name="WEB-INF/report/*.java" />
+				<exclude name="WEB-INF/report/*.bak" />
+				<exclude name="WEB-INF/anexosLtcat/*.*" />
+				<exclude name="WEB-INF/atualizador/*.*" />
+				<exclude name="WEB-INF/temp/*.*" />
+				<exclude name="anexos/*.*" />
+				<exclude name="backup/*.*" />
+				<exclude name="${metadados.dir}/clean.sql"/>
+				<exclude name="${metadados.dir}/create_data.sql"/>
+				<exclude name="${metadados.dir}/create.sql"/>
+				<exclude name="${metadados.dir}/populate.sql"/>
+				<exclude name="${metadados.dir}/update_dev.sql"/>
+			</fileset>
+		</copy>
+		<!-- Copia as libs para diretorio temporario -->
+		<copy todir="${tmpweb}/${lib}" flatten="true" >
+			<fileset dir="${base}/${lib}">
+				<exclude name="fortes-ant.jar" />
+				<exclude name="pmd-4.2.2.jar" />
+				<exclude name="hsqldb.jar" />
+				<exclude name="checkstyle-4.4.jar" />
+				<exclude name="findbugs/**" />
+				<exclude name="findbugs*.jar" />
+				<exclude name="emma*.jar" />
+				<exclude name="ant-junit.jar" />
+				<exclude name="jmock*.jar" />
+				<exclude name="classmock_1.0.jar" />
+				<exclude name="junit.jar" />
+				<exclude name="selenium*.jar" />
+				<exclude name="spring-mock.jar" />
+				<exclude name="retroweaver-all-2.0.2.jar" />
+				<exclude name="args4j-2.0.1.jar" />
+				<exclude name="org.crap4j.jar" />
+				<exclude name="servlet-2.3.jar" />
+				<exclude name="backup"/>
+			</fileset>
+		</copy>
+		
+		<!-- Gera hibernate.cfg.xml com hibernate.show_sql = false -->
+		<exec executable="ruby" failonerror="true">
+			<arg value="${ant.project.name}/geracaoHibernateCfg.rb" />
+			<arg value="${tmpweb}/WEB-INF/classes" />
+		</exec>
+		
+		<!-- Gera War file de acordo com o diretorio temporario -->
+		<war webxml="${tmpweb}/WEB-INF/web.xml"
+			destfile="${ant.project.name}/dist/fortesrh.war" basedir="${tmpweb}"
+			excludes="${test-ignore}/**">
+		</war>
+		
+		<delete dir="${tmpweb}" /> <!--Deleta diretorio temporario -->
+	</target>
+	
+	<target name="update-file-update-sql">
+		<!-- Solicita Numero da Versao -->
+		<input addproperty="versao.atualizador" message="Versao do FortesRH:" />
+		
+		<exec executable="ruby">
+			<arg value="${ant.project.name}/migrate.rb" />
+			<arg value="--deploy" />
+			<arg value="${versao.atualizador}" />
+			<arg value="${ant.project.name}" />
+		</exec>
+		
+		<antcall target="verifica-migrates-update-sql"></antcall>
+	</target>
+
+	<target name="verifica-migrates-update-sql">
+		<echo message="----------------- Verificacao de migrates que constam na pasta do FortesRH e nao constam no update.sql -----------------" />
+		<exec executable="ruby">
+			<arg value="${ant.project.name}/migrate.rb" />
+			<arg value="--valida_migrates" />
+			<arg value="${ant.project.name}" />
+		</exec>
+	</target>
+	
+	<target name="recreate-bd-vazio">
+		<sql driver="org.postgresql.Driver"
+			url="jdbc:postgresql://localhost:5432/template1"
+			userid="postgres"
+			password="1234"
+			classpath="${lib.dir}/postgresql-9.0-801.jdbc3.jar"
+			autocommit="true">
+			<transaction>
+				drop database if exists fortesrh_create_temp;
+				create database fortesrh_create_temp with encoding = 'UTF-8';
+			</transaction>
+		</sql>
+				
+		<echo message="Banco criado com sucesso" />
+	</target>
+
+	<target name="generate-create-createdata" depends="update-file-update-sql,recreate-bd-vazio">
+		<echo message="Criando banco de dados vazio" />
+		<exec failonerror="true" executable="psql"
+			input="${metadados.dir}/create.sql">
+			<arg value="-U" />
+			<arg value="postgres" />
+			<arg value="fortesrh_create_temp" />
+		</exec>
+
+		<echo message="Atualizando banco com update.sql" />
+		<!-- o update deve ser executado somente a partir da versão atual-->
+		<exec executable="ruby" failonerror="true">
+			<arg value="${ant.project.name}/migrate.rb" />
+			<arg value="--update-db-vazio" />
+			<arg value="${versao.atualizador}" />
+			<arg value="${ant.project.name}" />
+			<arg value="fortesrh_create_temp" />
+		</exec>
+				
+		<echo message="Criando create.sql" />
+		<exec executable="pg_dump" failonerror="true" 
+			output="${metadados.dir}/create.sql">
+			<arg value="-U" />
+			<arg value="postgres" />
+			<arg value="--column-inserts" />
+			<arg value="fortesrh_create_temp" />
+		</exec>
+		
+		<echo message="Criando create_data.sql" />
+		<exec executable="pg_dump" failonerror="true">
+			<arg value="-U" />
+			<arg value="postgres" />
+			<arg value="--disable-triggers" />
+			<arg value="--data-only" />
+			<arg value="--blobs" />
+			<arg value="--column-inserts" />
+			<arg value="--file=${metadados.dir}/create_data.sql" />
+			<arg value="fortesrh_create_temp" />
+		</exec>
+		
+		<copy file="${metadados.dir}/create.sql" todir="${ant.project.name}/dist" />
+
+		<antcall target="drop-temp-db"></antcall>
+		
+		<echo message="Banco atualizado com sucesso" />
+	</target>
+
+	<target name="drop-temp-db">
+		<echo message="Reconfigurando banco original" />
+		<sql driver="org.postgresql.Driver"
+			url="jdbc:postgresql://localhost:5432/template1"
+			userid="postgres"
+			password="1234"
+			classpath="${lib.dir}/postgresql-9.0-801.jdbc3.jar"
+			autocommit="true">
+			<transaction>
+				drop database fortesrh_create_temp;
+			</transaction>
+		</sql>
+	</target>
+
+	<!-- Gera Atualizador -->
+	<target name="build_atualizador">
+		<ant dir="EquipeRH/FortesRH_Atualizador" antfile="gera_atualizador_build.xml">
+			<property name="tomcat.versao" value="Tomcat7" /> <!-- Versão do tomcat -->
+			<property name="fortesrh.war.file" location="${ant.project.name}/dist/fortesrh.war" /> <!-- Origem -->
+			<property name="fortesrh.pack.dir" location="${ant.project.name}/dist" /> <!-- Destino -->
+		</ant>
+	</target>
+
+</project>

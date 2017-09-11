@@ -1,0 +1,34 @@
+rhhomologacao:
+  host: 10.1.3.48
+  user: fortes
+  password: fortes$01
+  tomcat_home: /home/fortes/apache-tomcat-6.0.33
+  app_name: fortesrhhomologacao
+  db_name: homologacao
+  run_migrates: true
+  backup_folder: /home/fortes/fortes/RHHOMOLOGACAO/backup_db
+  repository_app: //10.1.254.1/public/Outros/PRONTO/FortesRH/versaoHomologacao/fortesrh.war
+	
+rhcomercial_informatica:
+  host: 10.1.254.247
+  user: root
+  password: 8KyHNnFT
+  tomcat_home: /usr/local/tomcat
+  app_name: fortesrhcomercial
+  db_name: fortesrhcomercial
+  backup_folder: /home/fortes/RHCOMERCIAL/backup_db
+  repository_app: //10.1.254.1/public/Outros/PRONTO/FortesRH/Instalador/1_1_119_136/fortesrh.war
+  environment:
+    JRE_HOME: /usr
+	
+rhoficial_informatica:
+  host: 10.1.254.247
+  user: root
+  password: 8KyHNnFT
+  tomcat_home: /usr/local/tomcat
+  app_name: fortesrh
+  db_name: fortesrh
+  backup_folder: /home/fortes/RH/backup_db
+  repository_app: //10.1.254.1/public/Outros/PRONTO/FortesRH/Instalador/1_1_121_140/fortesrh.war
+  environment:
+    JRE_HOME: /usr	
